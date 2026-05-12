@@ -19,17 +19,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse, Response
 
-from backend.cache_store import compute_hash, get_cached, set_cache
-from backend.model_inference import (
-    load_model, smart_sample_frames, predict,
-    validate_video_duration, get_top_violent_frame_indices,
-    get_video_metadata,
-)
-from backend.gif_generator import generate_gif
-from backend.pdf_generator import generate_pdf_report
-from backend.telegram_service import send_violence_alert, answer_false_alarm_callback
-from backend.frame_upscaler import upscale_frames
-"""from cache_store import compute_hash, get_cached, set_cache
+from cache_store import compute_hash, get_cached, set_cache
 from model_inference import (
     load_model, smart_sample_frames, predict,
     validate_video_duration, get_top_violent_frame_indices,
@@ -38,7 +28,7 @@ from model_inference import (
 from gif_generator import generate_gif
 from pdf_generator import generate_pdf_report
 from telegram_service import send_violence_alert, answer_false_alarm_callback
-from frame_upscaler import upscale_frames"""
+from frame_upscaler import upscale_frames
 
 # ─── CONSTANTS ────────────────────────────────────────────────────────────────
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "violence_model_v3.h5") 
