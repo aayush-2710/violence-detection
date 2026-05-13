@@ -19,32 +19,49 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse, Response
 
-from backend.cache_store import compute_hash, get_cached, set_cache
-from backend.model_inference import (
-    load_model, smart_sample_frames, predict,
-    validate_video_duration, get_top_violent_frame_indices,
-    get_video_metadata,
-)
-from backend.gif_generator import generate_gif
-from backend.pdf_generator import generate_pdf_report
-from backend.telegram_service import send_violence_alert, answer_false_alarm_callback
-from backend.frame_upscaler import upscale_frames
-"""from cache_store import compute_hash, get_cached, set_cache
+from cache_store import compute_hash, get_cached, set_cache
+
 from model_inference import (
-    load_model, smart_sample_frames, predict,
-    validate_video_duration, get_top_violent_frame_indices,
+    load_model,
+    smart_sample_frames,
+    predict,
+    validate_video_duration,
+    get_top_violent_frame_indices,
     get_video_metadata,
 )
+
 from gif_generator import generate_gif
 from pdf_generator import generate_pdf_report
-from telegram_service import send_violence_alert, answer_false_alarm_callback
-from frame_upscaler import upscale_frames"""
+from telegram_service import (
+    send_violence_alert,
+    answer_false_alarm_callback,
+)
+from frame_upscaler import upscale_frames
+
+from cache_store import compute_hash, get_cached, set_cache
+
+from model_inference import (
+    load_model,
+    smart_sample_frames,
+    predict,
+    validate_video_duration,
+    get_top_violent_frame_indices,
+    get_video_metadata,
+)
+
+from gif_generator import generate_gif
+from pdf_generator import generate_pdf_report
+from telegram_service import (
+    send_violence_alert,
+    answer_false_alarm_callback,
+)
+from frame_upscaler import upscale_frames
 
 # ─── CONSTANTS ────────────────────────────────────────────────────────────────
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "violence_model_v3.h5") 
 LOGO_PATH    = os.path.join(os.path.dirname(__file__), "logo.png")
-TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "8537775823:AAFT3Ug14mW5UFheXhhx1a5DXeTERNDEzmM")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "1842853842")
+TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
@@ -67,26 +84,57 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── MODEL LOAD (once at startup) ────────────────────────────────────────────
-print("[STARTUP] Loading model...")
-model = load_model(MODEL_PATH)
-print("[STARTUP] Model loaded.")
+# ─── MODEL GLOBAL ─────────────────────────────────────────────────────────────
+model = None
+
+# ─── LIFESPAN (load model AFTER port binds) ───────────────────────────────────
+from contextlib import asynccontextmanager
+import sys, traceback, logging
+
+logging.basicConfig(level=logging.DEBUG, stream=sys.stdout,
+                    format="%(asctime)s %(levelname)s %(message)s")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global model
+    logging.info("[STARTUP] Loading model from: %s", MODEL_PATH)
+    try:
+        model = load_model(MODEL_PATH)
+        logging.info("[STARTUP] Model loaded OK.")
+    except Exception:
+        traceback.print_exc()
+        raise  # crash with visible traceback
+    yield
+    logging.info("[SHUTDOWN] Cleaning up.")
+
+# ─── APP INIT ─────────────────────────────────────────────────────────────────
+app = FastAPI(
+    title="Violence Detection API",
+    description="Production-ready CNN+LSTM violence detection backend.",
+    version="3.0.0",
+    lifespan=lifespan,
+)
 
 
 # ─── HEALTH ───────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
+    import psutil
+    mem = psutil.virtual_memory()
     return {
         "status": "ok",
-        "model": "loaded",
+        "model": "loaded" if model is not None else "not loaded",
         "cache_entries": len(_session_store),
+        "ram_used_mb": mem.used // 1024**2,
+        "ram_total_mb": mem.total // 1024**2,
         "timestamp": datetime.now().isoformat(),
     }
-
 
 # ─── ANALYZE ──────────────────────────────────────────────────────────────────
 @app.post("/analyze")
 async def analyze(file: UploadFile = File(...)):
+    if model is None:
+        raise HTTPException(503, "Model not loaded yet. Try again in a few seconds.")
     """
     Main analysis endpoint.
     Steps:
