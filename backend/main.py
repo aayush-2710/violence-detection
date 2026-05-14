@@ -3,6 +3,7 @@ FastAPI backend — Violence Detection System
 All endpoints, CORS, model lifecycle, in-memory state.
 python -m uvicorn backend.main:app --reload --port 8000
 http://127.0.0.1:8000/docs
+cloudflared tunnel --url http://localhost:8000
 """
 import io
 import os
@@ -19,8 +20,10 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse, Response
 
-from cache_store import compute_hash, get_cached, set_cache
+import sys, os
+sys.path.insert(0, os.path.dirname(__file__))  # ← this one line fixes everything
 
+from cache_store import compute_hash, get_cached, set_cache
 from model_inference import (
     load_model,
     smart_sample_frames,
@@ -29,7 +32,6 @@ from model_inference import (
     get_top_violent_frame_indices,
     get_video_metadata,
 )
-
 from gif_generator import generate_gif
 from pdf_generator import generate_pdf_report
 from telegram_service import (
